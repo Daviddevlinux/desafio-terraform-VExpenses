@@ -547,7 +547,7 @@ Para mostrar visualmente a página do Nginx, clique no IP público na página da
 
 Ou, se prefeir, basta colocar o IP da sua instância no navegador:
 
-![alt text](imagens-readme/final.png)
+![alt text](imagens-readme/finish.png)
 
 ## Conclusão
 
