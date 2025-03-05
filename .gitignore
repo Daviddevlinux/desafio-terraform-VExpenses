@@ -1,0 +1,18 @@
+# Ignore arquivos e pastas de configuração do Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Ignore arquivos de logs
+*.log
+
+# Ignore arquivos temporários do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Ignore arquivos de teste
+test.txt
+
+
+*.pem
