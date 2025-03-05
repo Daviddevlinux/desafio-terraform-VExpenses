@@ -5,13 +5,13 @@ provider "aws" {
 variable "projeto" {
   description = "Nome do projeto"
   type        = string
-  default     = "VExpenses"
+  default     = "VExpenses Estagio em DevOps"
 }
 
 variable "candidato" {
   description = "Nome do candidato"
   type        = string
-  default     = "SeuNome"
+  default     = "David Maia"
 }
 
 resource "tls_private_key" "ec2_key" {
@@ -68,41 +68,43 @@ resource "aws_route_table" "main_route_table" {
 resource "aws_route_table_association" "main_association" {
   subnet_id      = aws_subnet.main_subnet.id
   route_table_id = aws_route_table.main_route_table.id
-
-  tags = {
-    Name = "${var.projeto}-${var.candidato}-route_table_association"
-  }
 }
 
 resource "aws_security_group" "main_sg" {
   name        = "${var.projeto}-${var.candidato}-sg"
-  description = "Permitir SSH de qualquer lugar e todo o tráfego de saída"
+  description = "Permitir SSH de um IP especifico e trafego HTTP/HTTPS de saida"
   vpc_id      = aws_vpc.main_vpc.id
 
-  # Regras de entrada
+  # Regras de entrada 
   ingress {
-    description      = "Allow SSH from anywhere"
-    from_port        = 22
-    to_port          = 22
+    description      = "Permitir SSH de um IP especifico na porta 2222"
+    from_port        = 2222
+    to_port          = 2222
     protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["177.137.88.209/32"]  # IP público da minha máquina
   }
 
-  # Regras de saída
+  ingress {
+    description      = "Permitir HTTP de qualquer IP"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]  # Permitir tráfego HTTP de qualquer IP
+  }
+
   egress {
-    description      = "Allow all outbound traffic"
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
+    description      = "Permitir somente HTTP/HTTPS para saida"
+    from_port        = 80
+    to_port          = 443
+    protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
   }
 
   tags = {
     Name = "${var.projeto}-${var.candidato}-sg"
   }
 }
+
 
 data "aws_ami" "debian12" {
   most_recent = true
@@ -117,15 +119,15 @@ data "aws_ami" "debian12" {
     values = ["hvm"]
   }
 
-  owners = ["679593333241"]
+  owners = ["136693071363"]
 }
 
 resource "aws_instance" "debian_ec2" {
-  ami             = data.aws_ami.debian12.id
-  instance_type   = "t2.micro"
-  subnet_id       = aws_subnet.main_subnet.id
-  key_name        = aws_key_pair.ec2_key_pair.key_name
-  security_groups = [aws_security_group.main_sg.name]
+  ami                   = data.aws_ami.debian12.id
+  instance_type         = "t2.micro"
+  subnet_id             = aws_subnet.main_subnet.id
+  key_name              = aws_key_pair.ec2_key_pair.key_name
+  vpc_security_group_ids = [aws_security_group.main_sg.id]
 
   associate_public_ip_address = true
 
@@ -135,16 +137,18 @@ resource "aws_instance" "debian_ec2" {
     delete_on_termination = true
   }
 
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update -y
-              apt-get upgrade -y
-              EOF
+
+  user_data = file("nginx.sh")
 
   tags = {
     Name = "${var.projeto}-${var.candidato}-ec2"
   }
+
+  depends_on = [ 
+    aws_security_group.main_sg 
+  ]
 }
+
 
 output "private_key" {
   description = "Chave privada para acessar a instância EC2"
