@@ -552,3 +552,16 @@ Ou, se prefeir, basta colocar o IP da sua instância no navegador:
 ## Conclusão
 
 Este desafio tem como finalidade demonstrar minha capacidade de provisionar infraestrutura automatizada utilizando Terraform, aplicar algumas melhorias de segurança e configurar a automação de serviços como o Nginx, em uma instância EC2 da AWS. Boas práticas de segurança foram aplicadas, como a restrição de IP no acesso SSH, o uso de uma porta não convencional para o SSH etc. Através dessa documentação detalhada e organizada, espero que o ambiente seja reproduzido de forma simples e eficiente.
+
+---
+
+## Autor
+
+David Maia - DevOps Engineer and DevSecOps Engineer
+Estudante de Sistemas de Informação na UFPB, Campus IV.
+
+- **E-mail:** david.goncalves@dcx.ufpb.br or daviddevmaia@gmail.com
+- **GitHub:** [DavidMaiaDev](https://github.com/DavidMaiaDev) and [DavidDevLinux](https://github.com/Daviddevlinux)
+- **LinkedIn:** [linkedin.com/in/davidmaiadev](https://linkedin.com/in/davidmaiadev)
+
+# -desafio-vexpenses
