@@ -230,3 +230,21 @@ output "ec2_public_ip" {
   value       = aws_instance.debian_ec2.public_ip
 }
 ```
+
+## Observação sobre o recurso aws_rout_table_association
+
+Ao analisar o código, percebi que o uso do argumento tags no recurso aws_route_table_association causaria um erro, pois esse recurso no Terraform não suporta o argumento tags. Se esse bloco fosse mantido, a execução do código falharia com a seguinte mensagem (eu fiz o teste para ter a certeza):
+
+### Código reclamando aqui do erro:
+
+![alt text](imagens-readme/Screenshot_1.png)
+
+### O erro que aparece ao dar o terraform plain:
+
+![alt text](imagens-readme/error.png)
+
+### Observação sobre o recurso dos grupos de segurança:
+
+Um erro que já aconteceu comigo em outros projetos e está acontecendo com esse ao criar o Security Group, ocorre devido à descrição do grupo de segurança. A mensagem de erro indica que a AWS não permite o uso de caracteres especiais (como acentos) no campo GroupDescription. O que acontece é que a AWS suporta apenas caracteres ASCII para esse campo.
+
+![alt text](imagens-readme/Screenshot_2.png)
