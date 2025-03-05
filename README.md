@@ -248,3 +248,307 @@ Ao analisar o código, percebi que o uso do argumento tags no recurso aws_route_
 Um erro que já aconteceu comigo em outros projetos e está acontecendo com esse ao criar o Security Group, ocorre devido à descrição do grupo de segurança. A mensagem de erro indica que a AWS não permite o uso de caracteres especiais (como acentos) no campo GroupDescription. O que acontece é que a AWS suporta apenas caracteres ASCII para esse campo.
 
 ![alt text](imagens-readme/Screenshot_2.png)
+
+# Vamos Melhorar: _Modificação e Melhoria do Código Terraform - (Tarefa 2)_
+
+### Restrição de IP para Conexão SSH
+
+No código original, o grupo de segurança permitia o acesso SSH de qualquer IP, isso representava uma falha de segurança, pois colocava a instância sujeita a ataques automatizados e tentativas de acesso de forma não autorizada. Resolvi esse problema para melhorar a segurança, modificando a regra de entrada para permitir conexões SSH apenas a partir do meu IP específico (Se for reproduzir a infraestrutura use o seu), no caso, o meu IP público.
+
+Alterei também a porta padrão do SSH de 22 para 2222, que é uma medida adicional de segurança que ajuda a reduzir a exposição a ataques automatizados, pois muitos scripts maliciosos buscam diretamente pela porta 22, que é a porta padrão do SSH.
+
+Essa configuração garante que apenas o IP autorizado possa acessar a instância via SSH e ainda protege a instância de tentativas de exploração de vulnerabilidades associadas ao uso da porta padrão.
+
+```bash
+resource "aws_security_group" "main_sg" {
+  name        = "${var.projeto}-${var.candidato}-sg"
+  description = "Permitir SSH de um IP específico e todo o tráfego de saída"
+  vpc_id      = aws_vpc.main_vpc.id
+
+  # Regras de entrada
+  ingress {
+    description      = "Permitir SSH de um IP específico"
+    from_port        = 2222
+    to_port          = 2222
+    protocol         = "tcp"
+    cidr_blocks      = ["177.137.88.209/32"]  # Esse é o IP da minha máquina
+  }
+```
+
+### Restrição do Tráfego de Saída no Security Group
+
+Além disso, no código original, o tráfego de saída estava totalmente aberto, permitindo todo tipo de tráfego para qualquer destino. Para aumentar a segurança, modifiquei essa regra para permitir apenas tráfego HTTP (porta 80) e HTTPS (porta 443), restringindo todos os outros tipos de tráfego de saída.
+
+```bash
+# Regras de saída - Restringir tráfego de saída para apenas HTTP e HTTPS
+  egress {
+    description      = "Permitir somente HTTP/HTTPS para saída"
+    from_port        = 80
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.projeto}-${var.candidato}-sg"
+  }
+}
+```
+
+Essas mudanças são boas práticas de segurança porque garantem que o servidor esteja mais protegido e restrito a comportamentos pré-determinados, limitando tanto as conexões de entrada quanto as de saída para os serviços.
+
+### Remoção de Suporte ao IPv6
+
+No código original, as regras de entrada e saída permitiam tráfego tanto para IPv4 quanto para IPv6. No entanto, decidi remover o suporte ao IPv6 para simplificar a configuração e aumentar a segurança da infraestrutura.
+
+A remoção do IPv6 foi implementada para reduzir a superfície de ataques, pois o IPv6 é menos utilizado em muitos ambientes de produção e pode introduzir uma complexidade que achei desnecessária aqui Focando apenas no IPv4, conseguimos um controle mais rígido e um ambiente mais simples de gerenciar.
+
+A ideia é eliminar possíveis pontos de ataque relacionados ao tráfego IPv6 e evitar explorações associadas ao suporte para esse protocolo, o que fortalece a segurança geral da infraestrutura.
+
+```bash
+ # Regras de entrada
+ingress {
+  description      = "Permitir SSH de um IP específico"
+  from_port        = 2222
+  to_port          = 2222
+  protocol         = "tcp"
+  cidr_blocks      = ["177.137.88.209/32"]  # IP público da minha máquina
+}
+
+# Regras de saída
+egress {
+  description      = "Permitir somente HTTP/HTTPS para saída"
+  from_port        = 80
+  to_port          = 443
+  protocol         = "tcp"
+  cidr_blocks      = ["0.0.0.0/0"]
+}
+
+```
+
+### Automação da Instalação do Nginx e Melhorias
+
+Implementei a automação da instalação e configuração do Nginx diretamente durante a criação da instância EC2, utilizando o script externo **nginx.sh**, que foi incluído no user_data. Esse script garante que o Nginx seja automaticamente instalado, iniciado e configurado para ser executado sempre que a instância for inicializada. Isso elimina a necessidade de qualquer intervenção manual após o provisionamento.
+
+Além da instalação do Nginx, o script também inclui duas práticas de segurança:
+
+**Desabilitei o login SSH como root.** Isso impede que o usuário root, que possui permissões totais no sistema, seja alvo de ataques diretos, reduzindo o risco de comprometimento.
+
+**Alterei a porta padrão do SSH (de 22 para 2222)**. Essa mudança adiciona uma camada extra de proteção, uma vez que muitos ataques automatizados são direcionados para a porta padrão 22. Ao mudar para a porta 2222, a instância fica menos exposta a essas tentativas de exploração.
+
+Essas práticas foram implementadas para melhorar a segurança do servidor, tornando-o menos suscetível a ataques comuns. O conteúdo do script nginx.sh é o seguinte:
+
+```bash
+#!/bin/bash
+# Atualiza os pacotes
+apt-get update -y
+apt-get upgrade -y
+
+# Instala o Nginx
+apt-get install -y nginx
+
+# Inicia e habilita o Nginx para iniciar no boot
+systemctl start nginx
+systemctl enable nginx
+
+# Desabilita o login SSH como root
+sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+
+# Altera a porta padrão do SSH de 22 para 2222
+sed -i 's/#Port 22/Port 2222/' /etc/ssh/sshd_config
+
+# Reinicia o serviço SSH para aplicar as mudanças
+systemctl restart sshd
+```
+
+No arquivo **.tf**, o script foi referenciado utilizando o parâmetro user_data:
+
+```bash
+  user_data = file("nginx.sh")
+```
+
+### Problema com o aws_route_table_association
+
+Como já foi falado lá em cima, para resolver o problema, removi o bloco tags. Isso evita o erro e permite que o provisionamento aconteça normalmente. Ele ficou assim:
+
+```bash
+resource "aws_route_table_association" "main_association" {
+  subnet_id      = aws_subnet.main_subnet.id
+  route_table_id = aws_route_table.main_route_table.id
+}
+```
+
+Com isso, o código não vai mais reclamar e vai ser aplicado corretamente sem o erro causado pela inclusão do bloco tags.
+
+### Problema de Dependência no Provisionamento da EC2
+
+Quando eu tentava criar a instância EC2, me aparecia esse erro:
+
+```
+Error: creating EC2 Instance: operation error EC2: RunInstances, https response error StatusCode: 400, RequestID: cbc95cf4-0ed7-4996-920d-89a0b6a4ada9, api error InvalidGroup.NotFound: The security group 'vexpenses-seunome-sg' does not exist in VPC 'vpc-0de5458faece6e98e'
+```
+
+Isso se dava porque o grupo de segurança não estava criado quando o Terraform tentou iniciar a instância EC2, que acontece devido a criação conjunta/paralela dos recursos... Pesquisado, adicionei duas soluções:
+
+- Dependência explicita com o depends_on:
+  Adicionei o atributo depends_on lá no resouce para garantir que o Terraform crie o grupo de segurança antes da instância EC2, garantindo a criação na ordem correta.
+
+```bash
+  depends_on = [
+    aws_security_group.main_sg
+  ]
+```
+
+- Usar vpc_security_group_ids:
+  Outra abordagem que resolve esse problema é usar o ID do grupo de segurança em vez do nome. O atributo vpc_security_group_ids usa o ID do grupo de segurança, o que torna o processo mais confiável em ambientes com VPC.
+
+```bash
+vpc_security_group_ids = [aws_security_group.main_sg.id]
+```
+
+### Alteração na AMI Debian para rodar provisionamento
+
+No código original, foi utilizada uma AMI do Debian 12 disponível no AWS Marketplace, o que gerava o erro "OptInRequired". Esse erro ocorria porque a imagem exigia a aceitação manual dos termos do marketplace da AWS antes de ser utilizada, o que impedia a criação automática da instância EC2.
+
+Para solucionar o problema, substituí a AMI pelo ID da AMI pública oficial do Debian 12. Essa versão pública não exige aceitação manual dos termos, permitindo que o provisionamento da instância EC2 ocorra sem problemas ou intervenções manuais. Como eu queria testar o provisionamento, foi interessante fazer isso.
+
+```bash
+ owners = ["136693071363"]
+```
+
+# Instruções detalhadas para reproduzir a infraestrutura criada
+
+## Pré-requisitos:
+
+- **Terraform:** Certifique-se de que o Terraform está instalado.
+- **AWS CLI:** A CLI da AWS deve estar configurada com suas credenciais.
+- **Uma conta AWS** com permissões para criar instâncias EC2, VPCs, e outros recursos.
+
+### Passo a passo:
+
+Clone este repositório em sua máquina local:
+
+SSH
+
+```bash
+git@gitlab.com:DavidMaiaDev/deafio-vexpenses.git
+```
+
+HTTPS
+
+```bash
+https://gitlab.com/DavidMaiaDev/deafio-vexpenses.git
+```
+
+Acesse o diretório do projeto:
+
+```bash
+cd desafio-vexpenses
+```
+
+Inicialize o Terraform no diretório do projeto:
+
+```bash
+terraform init
+```
+
+Para revisar o plano de execução do Terraform:
+
+```bash
+terraform plan
+```
+
+Aplique o plano para provisionar os recursos na AWS:
+
+```bash
+terraform apply
+```
+
+## Agora que a instância está rodando e foi um sucesso, vamos ver como acessar essa instância via SSH:
+
+### Obter o Conteúdo da Chave .pem Gerada pelo Terraform
+
+Primeiro, você deve acessar o output do Terraform para obter o conteúdo da chave privada que foi gerada durante a execução. Execute o seguinte comando na sua linha de comando no diretório do projeto Terraform:
+
+```bash
+terraform output private_key
+```
+
+O que será retornado pra você é uma chave privada como essa:
+![alt text](imagens-readme/out.png)
+
+### Crie o arquivo .pem
+
+Agora, crie um arquivo .pem na sua máquina para armazenar a chave privada. Faça isso da seguinte forma:
+
+Crie um novo arquivo .pem no diretório do projeto (use o nome que aparece ao clicar no botão connect e você definiu no código main.tf):
+
+![alt text](imagens-readme/primeiro.png)
+
+No meu caso, o nome será:
+
+![alt text](imagens-readme/segundo.png)
+
+Crie um novo arquivo .pem (use um nome apropriado, o meu é o: "VExpenses Estagio em DevOps-David Maia-key.pem"):
+
+```bash
+nano nome-da-chave.pem
+```
+
+Dentro do arquivo você deve colocar a chave que foi mostrada ao dar o comando **"terraform output private_key"**
+
+### Ajustar Permissões da Chave
+
+Depois de salvar a chave, é importante ajustar suas permissões para garantir que ela não seja acessível publicamente. Execute o seguinte comando:
+
+```bash
+chmod 400 minha-chave.pem
+```
+
+Esse comando vai garantir que a chave possa ser apenas lida. Isso segue boas práticas de segurança.
+
+### Se conectando à instância via SSH
+
+Agora dá pra usar usar a chave privada para se conectar à sua instância EC2. Você precisará do endereço IP público da instância. (Sega os passos das imagens acima para pegar o comando).
+
+No meu caso, o comando é o:
+
+```bash
+ssh -i "VExpenses Estagio em DevOps-David Maia-key.pem" admin@ec2-54-86-226-196.compute-1.amazonaws.com -p 2222
+```
+
+Perceba que estou usando o **-p 2222** porque configurei que para ter acesso à instância, seria através da porta 2222.
+
+### Fazendo juntos, executando os comandos de entrada
+
+![alt text](imagens-readme/ec2.png)
+
+### Verificar o Status do Nginx
+
+Depois de estar conectado à instância, execute o comando abaixo para verificar o status do Nginx e certificar-se de que ele está em execução:
+
+![alt text](imagens-readme/nginx.png)
+
+### Nginx rodando
+
+Você pode usar o comando curl diretamente no servidor para verificar se o Nginx responde corretamente:
+
+```bash
+curl 54.86.226.196
+```
+
+![alt text](imagens-readme/terceiro.png)
+Esse é o IP da minha instância, caso for usar o comando, coloque o da sua instância. Essa resposta indica que o Nginx está ativo e funcionando na porta 80, servindo a página padrão com sucesso.
+
+### Usando o IP público no navegador
+
+Para mostrar visualmente a página do Nginx, clique no IP público na página da instância, site da AWS:
+![alt text](imagens-readme/fim.png)
+
+Ou, se prefeir, basta colocar o IP da sua instância no navegador:
+
+![alt text](imagens-readme/final.png)
+
+## Conclusão
+
+Este desafio tem como finalidade demonstrar minha capacidade de provisionar infraestrutura automatizada utilizando Terraform, aplicar algumas melhorias de segurança e configurar a automação de serviços como o Nginx, em uma instância EC2 da AWS. Boas práticas de segurança foram aplicadas, como a restrição de IP no acesso SSH, o uso de uma porta não convencional para o SSH etc. Através dessa documentação detalhada e organizada, espero que o ambiente seja reproduzido de forma simples e eficiente.
