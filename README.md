@@ -1,4 +1,4 @@
-# Desafio Online da VExpenses - Processo Seletivo para Estágio em DevOps
+# Desafio VExpenses - Processo Seletivo para Estágio em DevOps
 
 ## Objetivo
 
